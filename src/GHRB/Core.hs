@@ -44,7 +44,7 @@ import           Distribution.Portage.Types (Category (Category),
 import           FlatParse.Basic            (Parser, Result (OK), char, eof,
                                              runParser, satisfy, string)
 import           GHRB.Core.Types            (PackageSet, St (St), completed,
-                                             downgrade, failed, toHashable,
+                                             downgrade, failed, 
                                              tried, unresolved, untried, installed)
 
 buildEmptyState :: St
@@ -111,18 +111,18 @@ getUntried packages st = st {untried = packages'}
 
 failedResolve :: UTCTime -> Package -> St -> St
 failedResolve t p st =
-  st {unresolved = Set.insert (toHashable t, p) . unresolved $ st}
+  st {unresolved = Set.insert (t, p) . unresolved $ st}
 
 hasDowngraded :: UTCTime -> Package -> St -> St
 hasDowngraded t p st =
-  st {downgrade = Set.insert (toHashable t, p) . downgrade $ st}
+  st {downgrade = Set.insert (t, p) . downgrade $ st}
 
 hasCompleted :: UTCTime -> Package -> St -> St
 hasCompleted t p st =
-  st {completed = Set.insert (toHashable t, p) . completed $ st}
+  st {completed = Set.insert (t, p) . completed $ st}
 
 hasFailed :: UTCTime -> Package -> St -> St
-hasFailed t p st = st {failed = Set.insert (toHashable t, p) . failed $ st}
+hasFailed t p st = st {failed = Set.insert (t, p) . failed $ st}
 
 addTried :: Package -> St -> St
 addTried p st = st {tried = Set.insert p . tried $ st}

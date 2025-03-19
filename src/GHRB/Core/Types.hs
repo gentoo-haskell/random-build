@@ -32,27 +32,38 @@ module GHRB.Core.Types
   , PackageSet
   , -- Running state
     Running(Running, Terminated)
-  , -- Hashable time
-    HashableUTCTime
-  , fromHashable
-  , toHashable
   , PrelimEmergeResult(PrelimEmergeSuccess, ResolveFailed,
                    TriedToDowngrade)
   , EmergeResult(BuildFailed, EmergeSuccess)
+  , prettyPrintSt
+  , success
+  , failure
+  , preMergeFailure
+  , message
+  , try
+  , successPackage
+  , failPackage
   ) where
 
-import           Control.Applicative        (optional, (<|>))
-import qualified Data.ByteString.Lazy       as BL (ByteString)
-import           Data.HashSet               (HashSet)
-import qualified Data.HashSet               as Set (map, size, toList)
-import           Distribution.Portage.Types (Package, getCategory, getPkgName,
-                                             unwrapCategory, unwrapPkgName)
-import           Options.Applicative        (Parser, flag', help, long, metavar,
-                                             short, strOption, value)
+import           Control.Applicative           (optional, (<|>))
+import qualified Data.ByteString.Lazy          as BL (ByteString)
+import           Data.HashSet                  (HashSet)
+import qualified Data.HashSet                  as Set (map, size, toList)
+import           Distribution.Portage.Types    (Package, getCategory,
+                                                getPkgName, unwrapCategory,
+                                                unwrapPkgName)
+import           Options.Applicative           (Parser, flag', help, long,
+                                                metavar, short, strOption,
+                                                value)
 
-import           Data.Hashable              (Hashable, hashWithSalt)
-import           Data.Time.Clock            (UTCTime)
-import           Data.Time.Clock.POSIX      (utcTimeToPOSIXSeconds)
+import           Data.Time.Clock.Compat        (UTCTime)
+import           Prettyprinter                 (Doc, SimpleDocStream, annotate,
+                                                defaultLayoutOptions, hardline,
+                                                layoutPretty, pretty, vsep,
+                                                (<+>))
+import           Prettyprinter.Render.Terminal (AnsiStyle,
+                                                Color (Cyan, Green, Magenta, Red, Yellow),
+                                                color)
 
 type Set = HashSet
 
@@ -73,13 +84,13 @@ data EmergeResult
   | EmergeSuccess UTCTime
   deriving (Show, Eq, Ord)
 
-type ResolveFailedAttempts = Set (HashableUTCTime, Package)
+type ResolveFailedAttempts = Set (UTCTime, Package)
 
-type TriedToDowngradeAttempts = Set (HashableUTCTime, Package)
+type TriedToDowngradeAttempts = Set (UTCTime, Package)
 
-type BuildFailedAttempts = Set (HashableUTCTime, Package)
+type BuildFailedAttempts = Set (UTCTime, Package)
 
-type EmergeSuccessAttempts = Set (HashableUTCTime, Package)
+type EmergeSuccessAttempts = Set (UTCTime, Package)
 
 type AttemptSets
   = ( ResolveFailedAttempts
@@ -104,6 +115,21 @@ data Args = Args
 
 type PackageSet = Set Package
 
+success :: Doc AnsiStyle -> Doc AnsiStyle
+success = annotate (color Green)
+
+failure :: Doc AnsiStyle -> Doc AnsiStyle
+failure = annotate (color Red)
+
+preMergeFailure :: Doc AnsiStyle -> Doc AnsiStyle
+preMergeFailure = annotate (color Yellow)
+
+message :: Doc AnsiStyle -> Doc AnsiStyle
+message = annotate (color Magenta)
+
+try :: Doc AnsiStyle -> Doc AnsiStyle
+try = annotate (color Cyan)
+
 -- | Our current build state
 data St = St
   { completed  :: EmergeSuccessAttempts
@@ -111,62 +137,86 @@ data St = St
   , downgrade  :: TriedToDowngradeAttempts
   , unresolved :: ResolveFailedAttempts
   , tried      :: PackageSet
-  , installed :: PackageSet
+  , installed  :: PackageSet
   , untried    :: [Package]
   , package    :: Package
   } deriving (Eq)
 
-instance Show St where
-  show st =
-    "\n--------\n\nResults:\n\nCompleted:\n"
-      ++ prettyPrintSet (Set.map snd $ completed st)
-      ++ "\nFailed:\n"
-      ++ prettyPrintSet (Set.map snd $ failed st)
-      ++ "\nThese packages tried to downgrade:\n"
-      ++ prettyPrintSet (Set.map snd $ downgrade st)
-      ++ "\nThese packages failed to resolve:\n"
-      ++ prettyPrintSet (Set.map snd $ unresolved st)
-      ++ "\n\nStatistics:\n\nsuccess: "
-      ++ show sc
-      ++ "\nfailures: "
-      ++ show sf
-      ++ "\ndowngrades: "
-      ++ show sd
-      ++ "\nunresolved: "
-      ++ show sur
-      ++ "\nuntried: "
-      ++ show sun
-      ++ "\nsuccessrate: "
-      ++ show sr
-      ++ "%"
-    where
-      sc = Set.size . completed $ st
-      sf = Set.size . failed $ st
-      sd = Set.size . downgrade $ st
-      sur = Set.size . unresolved $ st
-      sun = length . untried $ st
-      sr =
-        if sc + sf + sd + sur == 0
-          then 0
-          else (sc * 100) `div` (sc + sf + sd + sur)
+prettyPrintSt :: St -> SimpleDocStream AnsiStyle
+prettyPrintSt = layoutPretty defaultLayoutOptions . prettySt
 
-newtype HashableUTCTime = HashableUTCTime
-  { fromHashable :: UTCTime
-  } deriving (Eq)
+prettySt :: St -> Doc AnsiStyle
+prettySt st =
+  hardline
+    <> pretty "--------"
+    <> hardline
+    <> hardline
+    <> pretty "Results:"
+    <> hardline
+    <> hardline
+    <> pretty "Completed:"
+    <> hardline
+    <> hardline
+    <> success (prettyPrintSet . Set.map snd $ completed st)
+    <> hardline
+    <> hardline
+    <> pretty "Failed:"
+    <> hardline
+    <> hardline
+    <> failure (prettyPrintSet . Set.map snd $ failed st)
+    <> hardline
+    <> hardline
+    <> pretty "These packages tried to downgrade:"
+    <> hardline
+    <> hardline
+    <> preMergeFailure (prettyPrintSet . Set.map snd $ downgrade st)
+    <> hardline
+    <> hardline
+    <> pretty "These packages failed to resolve:"
+    <> hardline
+    <> hardline
+    <> preMergeFailure (prettyPrintSet . Set.map snd $ unresolved st)
+    <> hardline
+    <> hardline
+    <> pretty "Statistics:"
+    <> hardline
+    <> hardline
+    <> pretty "success:"
+    <+> success (pretty sc) <> hardline <> pretty "failures:"
+    <+> failure (pretty sf) <> hardline <> pretty "downgrades:"
+    <+> preMergeFailure (pretty sd) <> hardline <> pretty "unresolved:"
+    <+> preMergeFailure (pretty sur) <> hardline <> pretty "untried:"
+    <+> pretty sun <> hardline <> pretty "success rate:"
+    <+> success (pretty sr <> pretty '%')
+  where
+    sc = Set.size . completed $ st
+    sf = Set.size . failed $ st
+    sd = Set.size . downgrade $ st
+    sur = Set.size . unresolved $ st
+    sun = length . untried $ st
+    sr =
+      if sc + sf + sd + sur == 0
+        then 0
+        else (sc * 100) `div` (sc + sf + sd + sur)
 
-instance Hashable HashableUTCTime where
-  hashWithSalt salt =
-    hashWithSalt salt . toRational . utcTimeToPOSIXSeconds . fromHashable
+prettyPrintSet :: PackageSet -> Doc ann
+prettyPrintSet = vsep . map prettyPrintPackage . Set.toList
 
-toHashable :: UTCTime -> HashableUTCTime
-toHashable = HashableUTCTime
-
-prettyPrintSet :: PackageSet -> String
-prettyPrintSet = unlines . map prettyPrintPackage . Set.toList
-
-prettyPrintPackage :: Package -> String
+prettyPrintPackage :: Package -> Doc ann
 prettyPrintPackage p =
-  (unwrapCategory . getCategory $ p) ++ "/" ++ (unwrapPkgName . getPkgName $ p)
+  pretty (unwrapCategory . getCategory $ p)
+    <> pretty '/'
+    <> pretty (unwrapPkgName . getPkgName $ p)
+
+successPackage :: Package -> SimpleDocStream AnsiStyle
+successPackage p =
+  layoutPretty defaultLayoutOptions . success
+    $ pretty "***" <+> prettyPrintPackage p <> pretty ": Success!"
+
+failPackage :: Package -> SimpleDocStream AnsiStyle
+failPackage p =
+  layoutPretty defaultLayoutOptions . failure
+    $ pretty "***" <+> prettyPrintPackage p <> pretty ": Build failed!"
 
 data Output
   = Std

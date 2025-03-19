@@ -9,20 +9,20 @@ module GHRB.IO.Cmd
   , runTransparent
   ) where
 
-import           Conduit                   (iterMC, sinkLazy)
-import           Control.Monad.IO.Class    (MonadIO, liftIO)
-import qualified Data.ByteString           as BS (ByteString, hPut)
-import qualified Data.ByteString.Lazy      as BL (ByteString)
-import           Data.Conduit              (ConduitT, (.|))
-import           Data.Conduit.Process      (sourceProcessWithStreams)
-import           Data.Void                 (Void)
-import           GHRB.Core.Types           (Stderr, Stdout)
-import           GHRB.IO.Utils             (printColor)
-import           System.Console.ANSI.Types (Color (Magenta))
-import           System.Exit               (ExitCode)
-import qualified System.IO                 as IO (stderr)
-import           System.IO                 (Handle, stderr, stdout)
-import           System.Process            (proc)
+import           Conduit                (iterMC, sinkLazy)
+import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Control.Monad.Reader   (MonadReader)
+import qualified Data.ByteString        as BS (ByteString, hPut)
+import qualified Data.ByteString.Lazy   as BL (ByteString)
+import           Data.Conduit           (ConduitT, (.|))
+import           Data.Conduit.Process   (sourceProcessWithStreams)
+import           Data.Void              (Void)
+import           GHRB.Core.Types        (Args, Stderr, Stdout)
+import           GHRB.Core.Utils        (prettyMessage)
+import           GHRB.IO.Utils          (bStderr)
+import           System.Exit            (ExitCode)
+import           System.IO              (Handle, stderr, stdout)
+import           System.Process         (proc)
 
 repo :: String
 repo = "haskell"
@@ -63,13 +63,13 @@ installedArgs = ["-I"]
 -- | Run a command and dump stdout to @stdout@, stderr to @stderr@, also
 --   capturing both streams.
 runTransparent ::
-     MonadIO m
+     (MonadIO m, MonadReader Args m)
   => FilePath -- ^ executable path
   -> [String] -- ^ arguments
        -- | Exit code, stdout, stderr
   -> m (ExitCode, Stdout, Stderr)
 runTransparent exe args = do
-  liftIO $ printColor IO.stderr Magenta $ "Running: " ++ showCmd
+  bStderr . prettyMessage $ "Running: " ++ showCmd
   liftIO
     (sourceProcessWithStreams
        (proc exe args) -- { delegate_ctlc = True }

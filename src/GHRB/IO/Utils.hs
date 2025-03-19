@@ -2,67 +2,65 @@
 {-# LANGUAGE LambdaCase       #-}
 
 module GHRB.IO.Utils
-  ( printColor
-  , bStderr
+  ( bStderr
   , stderr
   , stdout
+  , bStdout
   , logOutput
   , getArgs
   ) where
 
-import           Control.Applicative        ((<**>))
-import           Control.Monad.IO.Class     (MonadIO, liftIO)
-import           Control.Monad.Reader       (MonadReader, asks)
-import qualified Data.ByteString.Char8      as BS (hPutStrLn, pack)
-import qualified Data.ByteString.Lazy       as BL (ByteString, appendFile,
-                                                   writeFile)
-import qualified Data.ByteString.Lazy.Char8 as BL (hPutStrLn, pack)
-import           GHRB.Core.Types            (Args, EmergePath,
-                                             HaskellUpdaterPath,
-                                             Output (DevNull, OutFile, Std),
-                                             PqueryPath, args, getEmerge,
-                                             getErrMode, getHU, getOutputMode,
-                                             getPquery)
-import           Options.Applicative        (execParser, fullDesc, helper, info,
-                                             progDesc)
-import           System.Console.ANSI        (setSGR)
-import           System.Console.ANSI.Types  (Color, ColorIntensity (Dull),
-                                             ConsoleLayer (Foreground),
-                                             SGR (Reset, SetColor))
-import           System.Directory           (findExecutable)
-import           System.Environment         (setEnv)
-import           System.Exit                (die)
-import qualified System.IO                  as IO (stderr, stdout)
-import           System.IO                  (Handle)
+import           Control.Applicative           ((<**>))
+import           Control.Monad.IO.Class        (MonadIO, liftIO)
+import           Control.Monad.Reader          (MonadReader, asks)
+import qualified Data.ByteString.Lazy          as BL (appendFile,
+                                                      writeFile)
+import qualified Data.ByteString.Lazy.Char8    as BL (hPutStrLn, pack)
+import           GHRB.Core.Types               (Args, EmergePath,
+                                                HaskellUpdaterPath,
+                                                Output (DevNull, OutFile, Std),
+                                                PqueryPath, args, getEmerge,
+                                                getErrMode, getHU,
+                                                getOutputMode, getPquery)
+import           Options.Applicative           (execParser, fullDesc, helper,
+                                                info, progDesc)
+import           Prettyprinter                 (Pretty, SimpleDocStream,
+                                                defaultLayoutOptions,
+                                                layoutPretty, pretty,
+                                                unAnnotateS)
+import           Prettyprinter.Render.Terminal (AnsiStyle)
+import qualified Prettyprinter.Render.Terminal as T (renderLazy)
+import qualified Prettyprinter.Render.Text     as TL (renderLazy)
+import           System.Directory              (findExecutable)
+import           System.Environment            (setEnv)
+import           System.Exit                   (die)
+import qualified System.IO                     as IO (stderr, stdout)
+import qualified Data.Text.Lazy.Encoding as TL (encodeUtf8)
 
-printColor :: MonadIO m => Handle -> Color -> String -> m ()
-printColor h color message = do
-  liftIO $ setSGR [SetColor Foreground Dull color]
-  liftIO . BS.hPutStrLn h . BS.pack $ message
-  liftIO $ setSGR [Reset]
-  liftIO . BS.hPutStrLn h . BS.pack $ ""
-
-stdout :: (MonadIO m, MonadReader Args m) => BL.ByteString -> m ()
-stdout message = do
+bStdout :: (MonadIO m, MonadReader Args m) => SimpleDocStream AnsiStyle -> m ()
+bStdout message = do
   outmode <- asks getOutputMode
   case outmode of
-    Std        -> liftIO $ BL.hPutStrLn IO.stdout message
-    OutFile fp -> liftIO $ BL.appendFile fp message
+    Std        -> liftIO $ BL.hPutStrLn IO.stdout . TL.encodeUtf8 . T.renderLazy $ message
+    OutFile fp -> liftIO $ BL.appendFile fp . TL.encodeUtf8 . TL.renderLazy . unAnnotateS $ message
     DevNull    -> pure ()
+
+stdout :: (MonadIO m, MonadReader Args m, Pretty a) => a -> m ()
+stdout = bStdout . layoutPretty defaultLayoutOptions . pretty
 
 logOutput :: MonadIO m => FilePath -> String -> m ()
 logOutput filepath message = liftIO $ BL.writeFile filepath . BL.pack $ message
 
-stderr :: (MonadIO m, MonadReader Args m) => String -> m ()
-stderr = bStderr . BL.pack
+stderr :: (MonadIO m, MonadReader Args m, Pretty a) => a -> m ()
+stderr = bStderr . layoutPretty defaultLayoutOptions . pretty
 
-bStderr :: (MonadIO m, MonadReader Args m) => BL.ByteString -> m ()
+bStderr :: (MonadIO m, MonadReader Args m) => SimpleDocStream AnsiStyle -> m ()
 bStderr message = do
   errmode <- asks getErrMode
   case errmode of
     DevNull      -> pure ()
-    Std          -> liftIO $ BL.hPutStrLn IO.stderr message
-    (OutFile fp) -> liftIO $ BL.appendFile fp message
+    Std          -> liftIO $ BL.hPutStrLn IO.stderr . TL.encodeUtf8 . T.renderLazy $ message
+    (OutFile fp) -> liftIO $ BL.appendFile fp . TL.encodeUtf8 . TL.renderLazy . unAnnotateS $ message
 
 getArgs :: MonadIO m => m Args
 getArgs = do

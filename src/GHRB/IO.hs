@@ -12,8 +12,6 @@ import           Control.Monad.Reader       (MonadReader, asks)
 import           Control.Monad.State        (MonadState, get, gets, modify)
 import           Control.Monad.Time         (MonadTime, currentTime)
 import qualified Data.ByteString.Char8      as BS (pack)
-import qualified Data.ByteString.Lazy       as BL (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BL (pack)
 import qualified Data.HashSet               as Set (difference, intersection,
                                                     size)
 import           Data.List                  (uncons)
@@ -32,13 +30,18 @@ import           GHRB.Core.Types            (Args,
                                              PackageSet,
                                              PrelimEmergeResult (PrelimEmergeSuccess, ResolveFailed, TriedToDowngrade),
                                              Running (Running, Terminated), St,
-                                             Stderr, Stdout, getAllPackages,
-                                             getEmerge, getHU, getPquery,
-                                             installed, package, untried)
+                                             Stderr, Stdout, failPackage,
+                                             getAllPackages, getEmerge, getHU,
+                                             getPquery, installed, package,
+                                             prettyPrintSt, successPackage,
+                                             untried)
+import           GHRB.Core.Utils            (prettyMessage, prettyPreMerge,
+                                             prettyTry)
 import           GHRB.IO.Cmd                (defaultEmergeArgs, defaultHUArgs,
                                              defaultPqueryArgs, installedArgs,
                                              repo, runTransparent)
-import           GHRB.IO.Utils              (bStderr, logOutput, stderr, stdout)
+import           GHRB.IO.Utils              (bStderr, bStdout, logOutput,
+                                             stderr, stdout)
 import           System.Exit                (ExitCode (ExitFailure, ExitSuccess))
 import           System.Process             (readProcessWithExitCode)
 
@@ -52,7 +55,8 @@ runPquery ::
 runPquery args = do
   pquery <- asks getPquery
   let args' = args ++ defaultPqueryArgs
-  (exitCode, packageList, stdErr) <- liftIO $ readProcessWithExitCode pquery args' ""
+  (exitCode, packageList, stdErr) <-
+    liftIO $ readProcessWithExitCode pquery args' ""
   case exitCode of
     ExitSuccess -> pure (exitCode, parsePackageList packageList, stdErr)
     _           -> pure (exitCode, Nothing, stdErr)
@@ -72,10 +76,11 @@ runEmerge ::
   -> m (ExitCode, String, String)
 runEmerge args pkg =
   asks getEmerge >>= \emerge ->
-    liftIO $ readProcessWithExitCode
-      emerge
-      (defaultEmergeArgs ++ args ++ [T.unpack . prettyPackage $ pkg])
-      ""
+    liftIO
+      $ readProcessWithExitCode
+          emerge
+          (defaultEmergeArgs ++ args ++ [T.unpack . prettyPackage $ pkg])
+          ""
 
 runHaskellUpdater ::
      (MonadIO m, MonadReader Args m) => m (ExitCode, Stdout, Stderr)
@@ -83,8 +88,7 @@ runHaskellUpdater =
   asks getHU >>= \haskellUpdater -> runTransparent haskellUpdater defaultHUArgs
 
 currentUntried ::
-  (MonadIO m, MonadReader Args m)
-  => m (Either Running PackageSet)
+     (MonadIO m, MonadReader Args m) => m (Either Running PackageSet)
 currentUntried = do
   ap <- asks getAllPackages
   rawInstalled <- currentInstalled
@@ -93,8 +97,7 @@ currentUntried = do
     Right inst -> pure . Right $ Set.difference ap inst
 
 currentInstalled ::
-     (MonadReader Args m, MonadIO m)
-  => m (Either Running PackageSet)
+     (MonadReader Args m, MonadIO m) => m (Either Running PackageSet)
 currentInstalled = do
   (exitCode, inst, stdErr) <- runPquery installedArgs
   case exitCode of
@@ -102,38 +105,36 @@ currentInstalled = do
       case inst of
         (Just packageSet) -> pure . Right $ packageSet
         Nothing ->
-          stderr "pquery output parsing failed" >> pure (Left Terminated)
+          bStderr (prettyMessage "pquery output parsing failed")
+            >> pure (Left Terminated)
     ExitFailure 127 ->
-      stderr "Received exit code 127 from pquery. Is it installed"
+      bStderr
+        (prettyMessage "Received exit code 127 from pquery. Is it installed")
         >> pure (Left Terminated)
     ExitFailure 1 -> pure (Left Terminated)
     ExitFailure ef ->
-      stderr
-        ("pquery exited with unsuccessful code " ++ show ef ++ "\n" ++ stdErr)
+      bStderr
+        (prettyMessage
+           $ "pquery exited with unsuccessful code "
+               ++ show ef
+               ++ "\n"
+               ++ stdErr)
         >> pure (Left Terminated)
 
 tryInstall ::
-     ( MonadIO m
-     , MonadReader Args m
-     , MonadState St m
-     , MonadTime m
-     )
+     (MonadIO m, MonadReader Args m, MonadState St m, MonadTime m)
   => m (PrelimEmergeResult, String)
 tryInstall = do
   pkg <- gets package
-  stderr $ "Trying " ++ (T.unpack . prettyPackage $ pkg)
-  stderr "Checking for downgrades..."
+  bStderr . prettyTry $ "Trying " ++ (T.unpack . prettyPackage $ pkg)
+  bStderr . prettyMessage $ "Checking for downgrades..."
   (exitCode, output) <- capturePortageOutput pkg
   case exitCode of
     ExitSuccess -> processIfNotDowngrade output
     _           -> currentTime >>= \time -> pure (ResolveFailed time, output)
 
 processIfNotDowngrade ::
-     ( MonadReader Args m
-     , MonadIO m
-     , MonadState St m
-     , MonadTime m
-     )
+     (MonadReader Args m, MonadIO m, MonadState St m, MonadTime m)
   => String
   -> m (PrelimEmergeResult, String)
 processIfNotDowngrade output = do
@@ -143,21 +144,20 @@ processIfNotDowngrade output = do
     else pure (PrelimEmergeSuccess, output)
 
 install ::
-     ( 
-     MonadIO m
-     , MonadState St m
-     , MonadReader Args m
-     , MonadTime m
-     )
+     (MonadIO m, MonadState St m, MonadReader Args m, MonadTime m)
   => m (EmergeResult, Running)
 install = do
   pkg <- gets package
+  bStderr . prettyMessage $ "Preliminary emerge run succeeded..."
   (exitCode, _, _) <- runEmerge ["--keep-going=y"] pkg
   time <- currentTime
   let result =
         if exitCode == ExitSuccess
           then EmergeSuccess time
           else BuildFailed time
+  if exitCode == ExitSuccess
+    then bStderr (successPackage pkg)
+    else bStderr (failPackage pkg)
   (exitCode', _, _) <- runHaskellUpdater
   if exitCode' /= ExitSuccess
     then pure (result, Terminated)
@@ -181,7 +181,7 @@ failed output result = do
             ("downgrade-", t, " tried to downgrade", hasDowngraded)
           _ -> undefined
   logPortageOutput time prefix pkg output
-  stderr $ (T.unpack . prettyPackage $ pkg) ++ message
+  bStderr . prettyPreMerge $ (T.unpack . prettyPackage $ pkg) ++ message
   modify (op time pkg)
 
 logPortageOutput ::
@@ -202,15 +202,14 @@ logPortageOutput time pathCircumstances pkg output = do
        ++ "\n"
        ++ output)
 
-totalStats ::
-     (MonadState St m, MonadReader Args m, MonadIO m) => m BL.ByteString
+totalStats :: (MonadState St m, MonadReader Args m, MonadIO m) => m String
 totalStats = do
   inst <- gets installed
   total <- asks getAllPackages
   let is = Set.size . Set.intersection total $ inst
       ts = Set.size total
       pc = (100 * is) `div` ts
-  pure . BL.pack
+  pure
     $ show is
         ++ " installed out of "
         ++ show ts
@@ -218,19 +217,15 @@ totalStats = do
         ++ show pc
         ++ "%."
 
-terminate ::
-     (MonadIO m, MonadReader Args m, MonadState St m)
-  => m ()
+terminate :: (MonadIO m, MonadReader Args m, MonadState St m) => m ()
 terminate = do
-  st <- get :: (MonadState St m) => m St
-  stdout . BL.pack $ show st
-  stdout . BL.pack $ "\n"
+  st <- get
+  bStdout . prettyPrintSt $ st
+  stdout "\n"
   totalStats >>= stdout
 
 capturePortageOutput ::
-     (MonadIO m, MonadReader Args m)
-  => Package
-  -> m (ExitCode, String)
+     (MonadIO m, MonadReader Args m) => Package -> m (ExitCode, String)
 capturePortageOutput pkg = do
   emerge <- asks getEmerge
   stderr
@@ -245,9 +240,7 @@ capturePortageOutput pkg = do
   pure (exitCode, output)
 
 checkForDowngrades ::
-     (MonadIO m, MonadReader Args m, MonadState St m)
-  => String
-  -> m Bool
+     (MonadIO m, MonadReader Args m, MonadState St m) => String -> m Bool
 checkForDowngrades portageOutput = do
   let result = parseDowngrades . BS.pack $ portageOutput
   case result of
@@ -261,12 +254,7 @@ checkForDowngrades portageOutput = do
     _ -> error "generic parser error"
 
 randomBuild ::
-     ( MonadIO m
-     , MonadState St m
-     , MonadReader Args m
-     , MonadTime m
-     )
-  => m Running
+     (MonadIO m, MonadState St m, MonadReader Args m, MonadTime m) => m Running
 randomBuild = do
   u <- gets untried
   case uncons u of
@@ -274,6 +262,8 @@ randomBuild = do
     Just (pkg, ps) -> do
       modify (\st -> st {package = pkg})
       modify (addTried pkg)
+      bStderr . prettyMessage
+        $ show (length ps + 1) ++ " packages left to consider.\n"
       (preliminaryEmergeResult, preliminaryOutput) <- tryInstall
       r <-
         case preliminaryEmergeResult of
@@ -293,6 +283,6 @@ randomBuild = do
               currentTime >>= \time ->
                 modify (updateInstalled time ps inst)
                   >> totalStats
-                  >>= bStderr
+                  >>= stderr
                   >> pure r
         else pure r
