@@ -17,8 +17,10 @@ import           Data.Conduit                       (ConduitT, (.|))
 import           Data.Conduit.Process.Effectful     (sourceProcessWithStreams)
 import           Data.Void                          (Void)
 import           Effectful                          (Eff, IOE, (:>))
+import           Effectful.Concurrent               (Concurrent)
 import           Effectful.FileSystem               (FileSystem)
 import           Effectful.FileSystem.IO.ByteString as BS (hPut)
+import           Effectful.Process                  (Process)
 import           Effectful.Reader.Static            (Reader)
 import           GHRB.Core.Types                    (Args, Stderr, Stdout)
 import           GHRB.Core.Utils                    (prettyMessage)
@@ -65,7 +67,12 @@ installedArgs = ["-I"]
 -- | Run a command and dump stdout to @stdout@, stderr to @stderr@, also
 --   capturing both streams.
 runTransparent ::
-     (IOE :> es, FileSystem :> es, Reader Args :> es)
+     ( IOE :> es
+     , FileSystem :> es
+     , Reader Args :> es
+     , Concurrent :> es
+     , Process :> es
+     )
   => FilePath -- ^ executable path
   -> [String] -- ^ arguments
        -- | Exit code, stdout, stderr

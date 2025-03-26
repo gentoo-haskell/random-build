@@ -16,6 +16,7 @@ import qualified Data.Text                     as T (unpack)
 import           Data.Time.Clock               (UTCTime)
 import           Distribution.Portage.Types    (Package)
 import           Effectful                     (Eff, IOE, (:>))
+import           Effectful.Concurrent          (Concurrent)
 import           Effectful.FileSystem          (FileSystem)
 import           Effectful.Process             (Process,
                                                 readProcessWithExitCode)
@@ -86,7 +87,12 @@ runEmerge args pkg =
       ""
 
 runHaskellUpdater ::
-     (IOE :> es, FileSystem :> es, Process :> es, Reader Args :> es)
+     ( IOE :> es
+     , FileSystem :> es
+     , Process :> es
+     , Reader Args :> es
+     , Concurrent :> es
+     )
   => Eff es (ExitCode, Stdout, Stderr)
 runHaskellUpdater =
   asks getHU >>= \haskellUpdater -> runTransparent haskellUpdater defaultHUArgs
@@ -166,6 +172,7 @@ install ::
      , Reader Args :> es
      , Process :> es
      , Time :> es
+     , Concurrent :> es
      )
   => Eff es (EmergeResult, Running)
 install = do
@@ -255,7 +262,8 @@ capturePortageOutput ::
   -> Eff es (ExitCode, String)
 capturePortageOutput pkg = do
   emerge <- asks getEmerge
-  stderr (emerge ++ " " ++ unwords defaultEmergeArgs ++ " " ++ "--pretend --color=y")
+  stderr
+    (emerge ++ " " ++ unwords defaultEmergeArgs ++ " " ++ "--pretend --color=y")
   (exitCode, stdOut, stdErr) <- runEmerge ["--pretend", "--color=y"] pkg
   let output = stdOut ++ stdErr
   stderr ("pretend_return: " ++ output)
@@ -283,6 +291,7 @@ randomBuild ::
      , Reader Args :> es
      , Process :> es
      , Time :> es
+     , Concurrent :> es
      , IOE :> es
      )
   => Eff es Running

@@ -28,6 +28,7 @@ import           Effectful.Process             (Process, runProcess)
 import           Effectful.Reader.Static       (Reader, runReader)
 import           Effectful.State.Static.Shared (State, evalState)
 import           Effectful.Time                (Time, runTime)
+import Effectful.Concurrent (Concurrent, runConcurrent)
 import           GHRB.Core                     (buildEmptyState)
 import           GHRB.Core.Types               (Args, Running (Running), St,
                                                 getAllPackages, getPquery,
@@ -43,6 +44,7 @@ builder ::
      , State St :> es
      , Reader Args :> es
      , Time :> es
+     , Concurrent :> es
      , IOE :> es
      )
   => Eff es ()
@@ -68,4 +70,4 @@ main =
               Right set -> do
                 untried' <- liftIO . shuffleIO . toList $ set
                 let state = initialState {untried = untried'}
-                runTime . evalState state $ finally builder terminate
+                runConcurrent . runTime . evalState state $ finally builder terminate
