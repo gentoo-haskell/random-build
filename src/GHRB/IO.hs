@@ -260,8 +260,8 @@ capturePortageOutput pkg = do
        ++ " "
        ++ unwords defaultEmergeArgs
        ++ " "
-       ++ "--pretend --nospinner")
-  (exitCode, stdOut, stdErr) <- runEmerge ["--pretend", "--nospinner"] pkg
+       ++ "--pretend")
+  (exitCode, stdOut, stdErr) <- runEmerge ["--pretend"] pkg
   let output = stdOut ++ stdErr
   stderr ("pretend_return: " ++ output)
   pure (exitCode, output)

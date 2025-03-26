@@ -10,22 +10,22 @@ module GHRB.IO.Cmd
   , runTransparent
   ) where
 
-import           Conduit                   (iterMC, sinkLazy)
-import           Control.Monad.IO.Class    (liftIO)
-import qualified Data.ByteString           as BS (ByteString, hPut)
-import qualified Data.ByteString.Lazy      as BL (ByteString)
-import           Data.Conduit              (ConduitT, (.|))
-import           Data.Conduit.Process      (sourceProcessWithStreams)
-import           Data.Void                 (Void)
-import           Effectful                 (Eff, IOE, (:>))
-import           Effectful.FileSystem      (FileSystem)
-import Effectful.Reader.Static (Reader)
-import           GHRB.Core.Types           (Stderr, Stdout, Args)
-import           GHRB.Core.Utils           (prettyMessage)
-import GHRB.IO.Utils (bStderr)
-import           System.Exit               (ExitCode)
-import           System.IO                 (Handle, stderr, stdout)
-import           System.Process            (proc)
+import           Conduit                            (iterMC, sinkLazy)
+import qualified Data.ByteString                    as BS (ByteString)
+import qualified Data.ByteString.Lazy               as BL (ByteString)
+import           Data.Conduit                       (ConduitT, (.|))
+import           Data.Conduit.Process.Effectful     (sourceProcessWithStreams)
+import           Data.Void                          (Void)
+import           Effectful                          (Eff, IOE, (:>))
+import           Effectful.FileSystem               (FileSystem)
+import           Effectful.FileSystem.IO.ByteString as BS (hPut)
+import           Effectful.Reader.Static            (Reader)
+import           GHRB.Core.Types                    (Args, Stderr, Stdout)
+import           GHRB.Core.Utils                    (prettyMessage)
+import           GHRB.IO.Utils                      (bStderr)
+import           System.Exit                        (ExitCode)
+import           System.IO                          (Handle, stderr, stdout)
+import           System.Process                     (proc)
 
 repo :: String
 repo = "haskell"
@@ -73,14 +73,13 @@ runTransparent ::
   -> Eff es (ExitCode, Stdout, Stderr)
 runTransparent exe args = do
   bStderr . prettyMessage $ "Running: " ++ showCmd
-  liftIO
-    (sourceProcessWithStreams
-       (proc exe args) -- { delegate_ctlc = True }
-       (pure ())
-       (transSink stdout)
-       (transSink stderr))
+  sourceProcessWithStreams
+    (proc exe args) -- { delegate_ctlc = True }
+    (pure ())
+    (transSink stdout)
+    (transSink stderr)
   where
-    transSink :: Handle -> ConduitT BS.ByteString Void IO BL.ByteString
+    transSink :: (FileSystem :> es) => Handle -> ConduitT BS.ByteString Void (Eff es) BL.ByteString
     transSink h = iterMC (BS.hPut h) .| sinkLazy
     showCmd :: String
     showCmd = unwords $ exe : map showArg args

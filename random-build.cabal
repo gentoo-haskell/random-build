@@ -9,14 +9,11 @@ description:
   evaluate the success rate. Currently, it only supports the ::haskell repo,
   but support for other repos may be added in the future.
 
-homepage:
-  https://github.com/gentoo-haskell/random-build
-
+homepage:        https://github.com/gentoo-haskell/random-build
 license:         BSD-3-Clause
 license-file:    LICENSE
 author:          Xavier Dectot
 maintainer:      xavier@wheredoibegin.fr
-
 copyright:
   Copyright 2025 Xavier Dectot
   Copyright 2025 Gentoo Authors
@@ -28,13 +25,13 @@ extra-doc-files:
   README.md
 
 tested-with:
-    , GHC ==9.0.2
-    , GHC ==9.2.8
-    , GHC ==9.4.8
-    , GHC ==9.6.6
-    , GHC ==9.8.4
-    , GHC ==9.10.1
-    , GHC ==9.12.1
+  GHC ==9.0.2
+   || ==9.2.8
+   || ==9.4.8
+   || ==9.6.6
+   || ==9.8.4
+   || ==9.10.1
+   || ==9.12.1
 
 source-repository head
   type:     git
@@ -51,8 +48,36 @@ common warnings
   if flag(pedantic)
     ghc-options: -Werror
 
+common shared-properties
+  default-language: Haskell2010
+  build-depends:
+    , base                  >=4.15.1.0  && <4.22
+    , bytestring            >=0.10.12.1 && <0.13
+    , effectful             ^>=2.5.1.0
+    , effectful-core        ^>=2.5.0
+    , monad-time-effectful  ^>=1.0.0.0
+    , mtl                   >=2.2.2     && <2.4
+    , optparse-applicative  ^>=0.18.1.0
+    , unix                  >=2.7.2.2   && <2.9
+    , unordered-containers  ^>=0.2.20
+
+library conduit-effectful
+  exposed-modules: Data.Conduit.Process.Effectful
+  build-depends:
+    , async           ^>=2.2.5
+    , base
+    , bytestring      >=0.10.12.1 && <0.13
+    , conduit         ^>=1.3.6
+    , conduit-extra   ^>=1.3.7
+    , effectful       ^>=2.5.1.0
+    , effectful-core  ^>=2.5.0
+    , process         >=1.6.13.2  && <1.7
+    , unliftio-core   ^>=0.2.1.0
+
+  hs-source-dirs:  eff
+
 library
-  import:            warnings
+  import:            warnings, shared-properties
   exposed-modules:
     GHRB.Core
     GHRB.Core.Types
@@ -62,45 +87,29 @@ library
     GHRB.IO.Utils
 
   build-depends:
-    , base                         >=4.15.1.0 && <4.22
-    , bytestring                   >=0.10.12.1 && <0.13
-    , conduit                      ^>=1.3.6
-    , conduit-extra                ^>=1.3.7
-    , effectful                    ^>=2.5.1.0
-    , effectful-core               ^>=2.5.0
-    , flatparse                    ^>=0.5.2.1
-    , monad-time-effectful         ^>=1.0.0.0
-    , mtl                          >=2.2.2 && <2.4
-    , optparse-applicative         ^>=0.18.1.0
-    , portage-hs                   ^>=0.1.0.0
-    , prettyprinter                ^>=1.7.0
-    , prettyprinter-ansi-terminal  ^>=1.1.3
-    , process                      >=1.6.13.2 && <1.7
-    , text                         >=1.2.5.0 && <2.2
-    , time                         >=1.9.3 && <1.15
-    , time-compat                  ^>=1.9.8
-    , transformers                 >=0.5.6.0
-    , unix                         >=2.7.2.2 && <2.9
-    , unordered-containers         ^>=0.2.20
+    , conduit                         ^>=1.3.6
+    , flatparse                       ^>=0.5.2.1
+    , optparse-applicative            ^>=0.18.1.0
+    , portage-hs                      ^>=0.1.0.0
+    , prettyprinter                   ^>=1.7.0
+    , prettyprinter-ansi-terminal     ^>=1.1.3
+    , process                         >=1.6.13.2  && <1.7
+    , random-build:conduit-effectful
+    , text                            >=1.2.5.0   && <2.2
+    , time                            >=1.9.3     && <1.15
+    , time-compat                     ^>=1.9.8
+    , transformers                    >=0.5.6.0
 
   hs-source-dirs:   src
   default-language: Haskell2010
 
 executable random-build
-  import:           warnings
+  import:           warnings, shared-properties
   main-is:           Main.hs
   build-depends:
-    , base                           >=4.15.1.0 && <4.22
-    , bytestring                     >=0.10.12.1 && <0.13
-    , effectful                      ^>=2.5.1.0
-    , effectful-core                 ^>=2.5.0
+    , list-shuffle  ^>=1.0.0.0
     , random-build
-    , list-shuffle                   ^>=1.0.0.0
-    , monad-time-effectful           ^>=1.0.0.0
-    , mtl                            >=2.2.2 && <2.4
-    , optparse-applicative           ^>=0.18.1.0
-    , unix                           >=2.7.2.2 && <2.9
-    , unordered-containers           ^>=0.2.20
 
   hs-source-dirs:   app
   default-language: Haskell2010
+  ghc-options:      -threaded
