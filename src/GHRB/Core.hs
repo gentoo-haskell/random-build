@@ -25,7 +25,7 @@ module GHRB.Core
   ) where
 
 import           Control.Applicative        (many, optional, (<|>))
-import           Control.Monad              (void)
+import           Control.Monad              (void, unless)
 import qualified Data.ByteString            as BS (ByteString)
 import qualified Data.ByteString.Char8      as BS (pack)
 import qualified Data.HashSet               as Set (insert, member)
@@ -42,7 +42,8 @@ import           Distribution.Portage.Types (Category (Category),
                                              getVersion, unwrapCategory,
                                              unwrapPkgName)
 import           FlatParse.Basic            (Parser, Result (OK), char, eof,
-                                             runParser, satisfy, string)
+                                             runParser, satisfy, string, anyChar)
+import qualified FlatParse.Basic as FP (failed)
 import           GHRB.Core.Types            (PackageSet, St (St), completed,
                                              downgrade, failed,
                                              tried, unresolved, untried, installed)
@@ -59,11 +60,24 @@ parsePackageList packageList =
 parsePackages :: Parser Void PackageSet
 parsePackages = parsePackage <|> (eof >> return mempty)
 
+stripANSI :: (Char -> Bool) -> Parser Void String
+stripANSI terminator = parseANSI terminator <|> (satisfy terminator >> pure "") <|> parseChar terminator
+
+parseChar :: (Char -> Bool) -> Parser Void String
+parseChar terminator = anyChar >>= \c -> (c :) <$> stripANSI terminator
+
+parseANSI :: (Char -> Bool) -> Parser Void String
+parseANSI terminator = do
+  $(string "\\[ESC")
+  void $ many (satisfy (/= 'm'))
+  $(char 'm')
+  stripANSI terminator
+
 parsePackage :: Parser Void PackageSet
 parsePackage = do
   category <- many (satisfy (/= '/'))
   $(char '/')
-  name <- many (satisfy (/= '\n'))
+  name <- many (satisfy (/= '\n'))
   void . optional $ $(char '\n')
   Set.insert
     Package
@@ -81,9 +95,9 @@ parseDowngrades = runParser parseDowngradeByLine
 parseDowngradeByLine :: Parser Void Bool
 parseDowngradeByLine =
   ($(string "[ebuild")
-     >> many (satisfy (`notElem` "^\\[]D"))
+     >> stripANSI (`elem` "^\\[]D")
      >> $(char 'D')
-     >> many (satisfy (`notElem` "^\\[]"))
+     >> stripANSI (`elem` "^\\[]")
      >> $(char ']')
      >> pure True)
     <|> (many (satisfy (/= '\n')) >> $(char '\n') >> parseDowngradeByLine)

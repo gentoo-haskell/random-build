@@ -39,7 +39,6 @@ defaultEmergeArgs =
   , "--complete-graph"
   , "--oneshot"
   , "--update"
-  , "--color=n" -- Need a ANSI filtering library
   , "--nospinner"
   ]
 
@@ -52,7 +51,7 @@ defaultHUArgs =
   , "--ignore-default-opts"
   , "--verbose"
   , "--quiet-build"
-  , "--color=n" -- Need a ANSI filtering library
+  , "--color=y"
   , "--nospinner"
   ]
 

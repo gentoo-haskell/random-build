@@ -46,8 +46,8 @@ import           GHRB.IO.Cmd                   (defaultEmergeArgs,
                                                 defaultPqueryArgs,
                                                 installedArgs, repo,
                                                 runTransparent)
-import           GHRB.IO.Utils                 (bStderr, logOutput, stderr,
-                                                stdout, bStdout)
+import           GHRB.IO.Utils                 (bStderr, bStdout, logOutput,
+                                                stderr, stdout)
 import           System.Exit                   (ExitCode (ExitFailure, ExitSuccess))
 
 tmpLogRoot :: String
@@ -171,7 +171,7 @@ install ::
 install = do
   pkg <- gets package
   bStderr . prettyMessage $ "Preliminary emerge run succeeded..."
-  (exitCode, _, _) <- runEmerge ["--keep-going=y"] pkg
+  (exitCode, _, _) <- runEmerge ["--keep-going=y", "--color=n"] pkg
   time <- currentTime
   let result =
         if exitCode == ExitSuccess
@@ -232,7 +232,7 @@ totalStats = do
   let is = Set.size . Set.intersection total $ inst
       ts = Set.size total
       pc = (100 * is) `div` ts
-  pure 
+  pure
     $ show is
         ++ " installed out of "
         ++ show ts
@@ -255,13 +255,8 @@ capturePortageOutput ::
   -> Eff es (ExitCode, String)
 capturePortageOutput pkg = do
   emerge <- asks getEmerge
-  stderr
-    (emerge
-       ++ " "
-       ++ unwords defaultEmergeArgs
-       ++ " "
-       ++ "--pretend")
-  (exitCode, stdOut, stdErr) <- runEmerge ["--pretend"] pkg
+  stderr (emerge ++ " " ++ unwords defaultEmergeArgs ++ " " ++ "--pretend --color=y")
+  (exitCode, stdOut, stdErr) <- runEmerge ["--pretend", "--color=y"] pkg
   let output = stdOut ++ stdErr
   stderr ("pretend_return: " ++ output)
   pure (exitCode, output)
