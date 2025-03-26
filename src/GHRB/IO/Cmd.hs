@@ -79,7 +79,10 @@ runTransparent exe args = do
     (transSink stdout)
     (transSink stderr)
   where
-    transSink :: (FileSystem :> es) => Handle -> ConduitT BS.ByteString Void (Eff es) BL.ByteString
+    transSink ::
+         (FileSystem :> es)
+      => Handle
+      -> ConduitT BS.ByteString Void (Eff es) BL.ByteString
     transSink h = iterMC (BS.hPut h) .| sinkLazy
     showCmd :: String
     showCmd = unwords $ exe : map showArg args
