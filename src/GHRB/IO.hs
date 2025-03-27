@@ -15,7 +15,7 @@ import           Data.List                     (uncons)
 import qualified Data.Text                     as T (unpack)
 import           Data.Time.Clock               (UTCTime)
 import           Distribution.Portage.Types    (Package)
-import           Effectful                     (Eff, IOE, (:>))
+import           Effectful                     (Eff, (:>))
 import           Effectful.Concurrent          (Concurrent)
 import           Effectful.FileSystem          (FileSystem)
 import           Effectful.Process             (Process,
@@ -87,8 +87,8 @@ runEmerge args pkg =
       ""
 
 runHaskellUpdater ::
-     ( IOE :> es
-     , FileSystem :> es
+     ( 
+      FileSystem :> es
      , Process :> es
      , Reader Args :> es
      , Concurrent :> es
@@ -166,8 +166,8 @@ processIfNotDowngrade output = do
     else pure (PrelimEmergeSuccess, output)
 
 install ::
-     ( IOE :> es
-     , FileSystem :> es
+     ( 
+     FileSystem :> es
      , State St :> es
      , Reader Args :> es
      , Process :> es
@@ -292,7 +292,6 @@ randomBuild ::
      , Process :> es
      , Time :> es
      , Concurrent :> es
-     , IOE :> es
      )
   => Eff es Running
 randomBuild = do

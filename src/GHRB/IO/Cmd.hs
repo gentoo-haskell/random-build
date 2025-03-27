@@ -16,7 +16,7 @@ import qualified Data.ByteString.Lazy               as BL (ByteString)
 import           Data.Conduit                       (ConduitT, (.|))
 import           Data.Conduit.Process.Effectful     (sourceProcessWithStreams)
 import           Data.Void                          (Void)
-import           Effectful                          (Eff, IOE, (:>))
+import           Effectful                          (Eff, (:>))
 import           Effectful.Concurrent               (Concurrent)
 import           Effectful.FileSystem               (FileSystem)
 import           Effectful.FileSystem.IO.ByteString as BS (hPut)
@@ -67,12 +67,7 @@ installedArgs = ["-I"]
 -- | Run a command and dump stdout to @stdout@, stderr to @stderr@, also
 --   capturing both streams.
 runTransparent ::
-     ( IOE :> es
-     , FileSystem :> es
-     , Reader Args :> es
-     , Concurrent :> es
-     , Process :> es
-     )
+     (FileSystem :> es, Reader Args :> es, Concurrent :> es, Process :> es)
   => FilePath -- ^ executable path
   -> [String] -- ^ arguments
        -- | Exit code, stdout, stderr

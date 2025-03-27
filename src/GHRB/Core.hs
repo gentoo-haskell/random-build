@@ -25,7 +25,7 @@ module GHRB.Core
   ) where
 
 import           Control.Applicative        (many, optional, (<|>))
-import           Control.Monad              (void, unless)
+import           Control.Monad              (void)
 import qualified Data.ByteString            as BS (ByteString)
 import qualified Data.ByteString.Char8      as BS (pack)
 import qualified Data.HashSet               as Set (insert, member)
@@ -43,7 +43,6 @@ import           Distribution.Portage.Types (Category (Category),
                                              unwrapPkgName)
 import           FlatParse.Basic            (Parser, Result (OK), char, eof,
                                              runParser, satisfy, string, anyChar)
-import qualified FlatParse.Basic as FP (failed)
 import           GHRB.Core.Types            (PackageSet, St (St), completed,
                                              downgrade, failed,
                                              tried, unresolved, untried, installed)

@@ -1,30 +1,81 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeOperators    #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Data.Conduit.Process.Effectful
   ( sourceProcessWithStreams
   ) where
 
-import           Data.ByteString            (ByteString)
-import           Data.Conduit               (ConduitT, runConduit, (.|))
-import           Data.Conduit.Process       (StreamingProcessHandle,
-                                             streamingProcess,
-                                             streamingProcessHandleRaw,
-                                             waitForStreamingProcess)
-import           Data.Void                  (Void)
-import           Effectful                  (Eff, IOE, Limit (Unlimited),
-                                             Persistence (Ephemeral),
-                                             UnliftStrategy (ConcUnlift),
-                                             liftIO, withEffToIO, (:>))
-import           Effectful.Concurrent.Async (Concurrent, Concurrently (..),
-                                             runConcurrently)
-import           Effectful.Exception        (finally, onException)
-import           Effectful.Process          (CreateProcess, Process,
-                                             terminateProcess)
-import           System.Exit                (ExitCode)
+import           Control.Monad.Trans                (lift)
+import           Data.ByteString                    (ByteString)
+import qualified Data.ByteString                    as BS (null)
+import           Data.ByteString.Builder.Extra      (defaultChunkSize)
+import           Data.Conduit                       (ConduitT, awaitForever,
+                                                     runConduit, yield, (.|))
+import           Data.Functor                       (($>))
+import           Data.Streaming.Process.Effectful   (InputSource, OutputSink,
+                                                     StreamingProcessHandle,
+                                                     isStdStream, osStdStream,
+                                                     streamingProcess,
+                                                     streamingProcessHandleRaw,
+                                                     waitForStreamingProcess)
+import           Data.Void                          (Void)
+import           Effectful                          (Eff, 
+                                                     Limit (Unlimited),
+                                                     Persistence (Ephemeral),
+                                                     UnliftStrategy (ConcUnlift),
+                                                     liftIO, withEffToIO, (:>))
+import           Effectful.Concurrent               (Concurrent)
+import           Effectful.Concurrent.Async         (Concurrently (..),
+                                                     runConcurrently)
+import           Effectful.Exception                (finally, onException)
+import           Effectful.FileSystem               (FileSystem)
+import           Effectful.FileSystem.IO            (BufferMode (NoBuffering),
+                                                     Handle, hClose,
+                                                     hSetBuffering)
+import           Effectful.FileSystem.IO.ByteString (hGetSome, hPut)
+import           Effectful.Process                  (CreateProcess, Process,
+                                                     StdStream (CreatePipe),
+                                                     terminateProcess)
+import           System.Exit                        (ExitCode)
+
+instance (FileSystem :> es) => InputSource (ConduitT ByteString o (Eff es) ()) where
+  isStdStream =
+    (\(Just h) -> hSetBuffering h NoBuffering $> sinkHandle h, Just CreatePipe)
+
+instance (FileSystem :> es, r ~ (), r' ~ ()) =>
+         InputSource (ConduitT ByteString o (Eff es) r, Eff es r') where
+  isStdStream =
+    ( \(Just h) -> hSetBuffering h NoBuffering $> (sinkHandle h, hClose h)
+    , Just CreatePipe)
+
+instance (FileSystem :> es) => OutputSink (ConduitT i ByteString (Eff es) ()) where
+  osStdStream =
+    ( \(Just h) -> hSetBuffering h NoBuffering $> sourceHandle h
+    , Just CreatePipe)
+
+instance (FileSystem :> es, r ~ (), r' ~ ()) =>
+         OutputSink (ConduitT i ByteString (Eff es) r, Eff es r') where
+  osStdStream =
+    ( \(Just h) -> hSetBuffering h NoBuffering $> (sourceHandle h, hClose h)
+    , Just CreatePipe)
+
+sinkHandle :: (FileSystem :> es) => Handle -> ConduitT ByteString o (Eff es) ()
+sinkHandle h = awaitForever (lift . hPut h)
+
+sourceHandle ::
+     (FileSystem :> es) => Handle -> ConduitT i ByteString (Eff es) ()
+sourceHandle h = do
+  bs <- lift $ hGetSome h defaultChunkSize
+  if BS.null bs
+    then pure ()
+    else yield bs >> sourceHandle h
 
 sourceProcessWithStreams ::
-     (Process :> es, Concurrent :> es, IOE :> es)
+     (Process :> es, Concurrent :> es, FileSystem :> es)
   => CreateProcess
   -> ConduitT () ByteString (Eff es) ()
   -> ConduitT ByteString Void (Eff es) a
@@ -47,5 +98,5 @@ sourceProcessWithStreams cp producerStdin consumerStdout consumerStderr = do
   return (ec, resStdout, resStderr)
 
 terminateStreamingProcess ::
-     (Process :> es) => StreamingProcessHandle -> Eff es ()
+     (Process :> es) => StreamingProcessHandle es -> Eff es ()
 terminateStreamingProcess = terminateProcess . streamingProcessHandleRaw

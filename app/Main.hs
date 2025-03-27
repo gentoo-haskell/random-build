@@ -20,7 +20,7 @@ module Main where
 import           Control.Monad                 (when)
 import           Control.Monad.IO.Class        (liftIO)
 import           Data.HashSet                  (toList)
-import           Effectful                     (Eff, IOE, runEff, (:>))
+import           Effectful                     (Eff, runEff, (:>))
 import           Effectful.Environment         (runEnvironment)
 import           Effectful.Exception           (finally)
 import           Effectful.FileSystem          (FileSystem, runFileSystem)
@@ -45,7 +45,6 @@ builder ::
      , Reader Args :> es
      , Time :> es
      , Concurrent :> es
-     , IOE :> es
      )
   => Eff es ()
 builder = do
