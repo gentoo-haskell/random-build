@@ -94,9 +94,9 @@ parseDowngrades = runParser parseDowngradeByLine
 parseDowngradeByLine :: Parser Void Bool
 parseDowngradeByLine =
   ($(string "[ebuild")
-     >> stripANSI (`elem` "^\\[]D")
+     >> satisfy (`notElem` "^\\[]D")
      >> $(char 'D')
-     >> stripANSI (`elem` "^\\[]")
+     >> satisfy (`notElem` "^\\[]")
      >> $(char ']')
      >> pure True)
     <|> (many (satisfy (/= '\n')) >> $(char '\n') >> parseDowngradeByLine)
