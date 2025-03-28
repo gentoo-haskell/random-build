@@ -59,19 +59,19 @@ parsePackageList packageList =
 parsePackages :: Parser Void PackageSet
 parsePackages = parsePackage <|> (eof >> return mempty)
 
-stripANSI :: (Char -> Bool) -> Parser Void String
-stripANSI terminator = parseANSI terminator <|> (satisfy terminator >> pure "") <|> parseChar terminator
-
-parseChar :: (Char -> Bool) -> Parser Void String
-parseChar terminator = anyChar >>= \c -> (c :) <$> stripANSI terminator
-
-parseANSI :: (Char -> Bool) -> Parser Void String
-parseANSI terminator = do
-  $(string "\\[ESC")
-  void $ many (satisfy (/= 'm'))
-  $(char 'm')
-  stripANSI terminator
-
+-- stripANSI :: (Char -> Bool) -> Parser Void String
+-- stripANSI terminator = parseANSI terminator <|> (satisfy terminator >> pure "") <|> parseChar terminator
+-- 
+-- parseChar :: (Char -> Bool) -> Parser Void String
+-- parseChar terminator = anyChar >>= \c -> (c :) <$> stripANSI terminator
+-- 
+-- parseANSI :: (Char -> Bool) -> Parser Void String
+-- parseANSI terminator = do
+--   $(string "\\[ESC")
+--   void $ many (satisfy (/= 'm'))
+--   $(char 'm')
+--   stripANSI terminator
+-- 
 parsePackage :: Parser Void PackageSet
 parsePackage = do
   category <- many (satisfy (/= '/'))
