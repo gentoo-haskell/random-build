@@ -42,7 +42,7 @@ import           Distribution.Portage.Types (Category (Category),
                                              getVersion, unwrapCategory,
                                              unwrapPkgName)
 import           FlatParse.Basic            (Parser, Result (OK), char, eof,
-                                             runParser, satisfy, string, anyChar)
+                                             runParser, satisfy, string) --, anyChar
 import           GHRB.Core.Types            (PackageSet, St (St), completed,
                                              downgrade, failed,
                                              tried, unresolved, untried, installed)
