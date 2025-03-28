@@ -131,4 +131,4 @@ executable random-build
   if flag(threads)
     ghc-options:      -threaded -rtsopts -with-rtsopts=N
   if flag(profile)
-    ghc-options: -prof-cafs -prof-auto -rtsopts
+    ghc-options: -fprof-cafs -fprof-auto -rtsopts
